@@ -1,0 +1,13 @@
+__pycache__/
+.pytest_cache/
+checkpoints/
+data/
+Test/
+experiments/
+graph-jepa-main/
+lightning_logs/
+logs/
+outputs/
+runs/
+results/
+

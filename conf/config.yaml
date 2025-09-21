@@ -1,0 +1,60 @@
+seed: 4
+
+data:
+  root: /home/eugen/Desktop/CodeWork/Projects/Diplom/notebooks/JepaAE/data
+  knn: 3
+  count_per_item: 30
+  mode: MarkovGraphs         # RandomPermutate | CopiedGraphs | MarkovGraphs
+  gamma: 0.5
+  val_ratio: 0.3
+  max_patches: 3           
+  norm:
+    method: zscore
+    attr: x
+
+model:
+  num_features: 13          
+  latent_dim: 50
+  predictor_hidden_dim: 10
+  pred_layers: 1
+  dropout: 0.1
+  pe_dim: 6
+  use_metis: true
+  per_graph: false
+  include_context_in_pool: true
+  use_encoder: student       # "teacher" | "student"
+  lr: 1e-2
+
+cutter:
+  strategy:
+    ctx_mode: khop
+    ctx_param: 2
+    tgt_mode: khop
+    tgt_param: 2
+
+trainer:
+  batch_size: 10
+  max_epochs: 1
+
+  gradient_clip_val: 1.0
+  log_every_n_steps: 20
+  num_workers: 0
+  pin_memory: false
+  detect_anomaly: false
+  monitor_metric: "val_loss"   
+  monitor_mode: "min"
+  early_stopping:
+    enabled: true
+    patience: 15
+    min_delta: 0.0
+
+experiments:
+  grid: 
+   trainer.batch_size: [1,2,4,6,8,10]
+
+
+
+
+  latent_rules: 
+
+
