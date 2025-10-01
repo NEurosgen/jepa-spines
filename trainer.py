@@ -9,7 +9,7 @@ from torch_geometric.loader import DataLoader
 from sklearn.model_selection import StratifiedKFold
 from sklearn.linear_model import Ridge, LogisticRegression
 from sklearn.metrics import accuracy_score, mean_absolute_error
-
+from representation_metrtic import load_model,fit_and_eval_linear,encode_repr,plot_umap_2d
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -20,6 +20,15 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+def get_report_model(model , train_loader ,val_loader ,device):
+    X_train, y_train = encode_repr(loader=train_loader, model=model, device=device)
+    X_train = torch.as_tensor(X_train, dtype=torch.float32)
+    y_train = torch.as_tensor(y_train, dtype=torch.long)
+    X_val, y_val = encode_repr(loader=val_loader, model=model, device=device)
+    X_val = torch.as_tensor(X_val, dtype=torch.float32)
+    y_val = torch.as_tensor(y_val, dtype=torch.long)
+    lin_report =fit_and_eval_linear(X_tr=X_train, y_tr=y_train, X_te=X_val, y_te=y_val)
+    return lin_report
 
 def run(cfg, create_dataset, create_model, train, test, evaluator=None):
     if cfg.seed is not None:
@@ -56,7 +65,7 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
 
         else:
             sharp = False
-            optimizer = torch.optim.Adam(
+            optimizer = torch.optim.SGD(
                 model.parameters(), lr=cfg.train.lr, weight_decay=cfg.train.wd)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
                                                                factor=cfg.train.lr_decay,
@@ -86,8 +95,8 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
 
             time_cur_epoch = time.time() - start
             per_epoch_time.append(time_cur_epoch)
-
-            print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Val: {val_loss:.4f}, Test: {test_loss:.4f} Seconds: {time_cur_epoch:.4f}')
+            report = get_report_model(model,train_loader=train_loader,val_loader=val_loader,device=str(cfg.device))
+            print(f"Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Val: {val_loss:.4f}, Test: {test_loss:.4f} Seconds: {time_cur_epoch:.4f},acc:{report['acc']:.4f},f1:{report['f1_macro']:.4f}")
 
             #writer.add_scalar(f'Run{run}/train-loss', train_loss, epoch)
             #writer.add_scalar(f'Run{run}/val-loss', val_loss, epoch)

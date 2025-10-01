@@ -1,17 +1,17 @@
 
 seed: 42
-checkpoint: false
+checkpoint: true
 dataset: labid
-num_workers: 0
+num_workers: 4
 model:
   gMHA_type: Hadamard
   gnn_type: GCNConv
-  nlayer_gnn: 2
-  nlayer_mlpmixer: 4
-  hidden_size: 256
+  nlayer_gnn: 1
+  nlayer_mlpmixer: 2
+  hidden_size: 232
   pool: 'mean'
 train:
-  optimizer: 
+  optimizer:
   wd: 0.001
   dropout: 0.2
   mlpmixer_dropout: 0.1
@@ -20,13 +20,14 @@ train:
   batch_size: 128
   lr: 0.0005
   runs: 3
-  lr_decay: 0.5
+  lr_decay: 0.8
   min_lr: 1e-8
 metis:
   n_patches: 4
   enable: true
   drop_rate: 0.1
   num_hops: 2
+
 pos_enc:
   rw_dim: 2
   patch_rw_dim: 2
@@ -35,7 +36,7 @@ pos_enc:
 device: 'cuda'
 
 jepa:
-  dist: 0
+  dist: 1
   enable: true
   num_context: 1
   num_targets: 1
@@ -46,8 +47,8 @@ data:
   knn: 3
   count_per_item: 40
   mode: MarkovGraphs         # RandomPermutate | CopiedGraphs | MarkovGraphs
-  gamma: 0.5
-  val_ratio: 0.3
+  gamma: 0.2
+  val_ratio: 0.5
   max_patches: 3           
   norm:
     method: zscore

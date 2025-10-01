@@ -224,7 +224,10 @@ def run_experiment(
 
 
         train_ds, val_ds, test_ds = create_dataset(cfg, seed=seed)
-        train_loader = DataLoader(train_ds, cfg.train.batch_size, shuffle=False, num_workers=cfg.num_workers)
+        assert len(train_ds) > 0, "Empty train_ds for this trial"
+        assert len(val_ds)   > 0, "Empty val_ds for this trial"
+
+        train_loader = DataLoader(train_ds, cfg.train.batch_size, shuffle=True, num_workers=cfg.num_workers)
         val_loader   = DataLoader(val_ds,   cfg.train.batch_size, shuffle=False, num_workers=cfg.num_workers)
 
 

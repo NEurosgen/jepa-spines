@@ -61,32 +61,39 @@ def encode_repr(loader,model,device = 'cuda'):
 
 
 from torch import Tensor
-def fit_and_eval_linear(X_tr: Tensor, y_tr: Tensor, X_te: Tensor, y_te: Tensor):
-    import numpy as np
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.pipeline import make_pipeline
-    from sklearn.linear_model import LogisticRegression, LinearRegression
-    from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, mean_squared_error, r2_score
+from sklearn.pipeline import make_pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 
-    # to numpy
-    X_tr = X_tr.cpu().numpy()
-    X_te = X_te.cpu().numpy()
-    y_tr = y_tr.view(-1).cpu().numpy()
-    y_te = y_te.view(-1).cpu().numpy()
+def fit_and_eval_linear(X_tr, y_tr, X_te, y_te):
+    # Если к тебе приходят torch.Tensor — безопасно переведём в numpy
+    import numpy as np, torch
+    if isinstance(X_tr, torch.Tensor): X_tr = X_tr.detach().cpu().numpy()
+    if isinstance(y_tr, torch.Tensor): y_tr = y_tr.detach().cpu().numpy().reshape(-1)
+    if isinstance(X_te, torch.Tensor): X_te = X_te.detach().cpu().numpy()
+    if isinstance(y_te, torch.Tensor): y_te = y_te.detach().cpu().numpy().reshape(-1)
+
+    # Импьютим NaN/Inf → сначала заменим Inf на NaN, потом заполним 0
+    X_tr = np.where(np.isfinite(X_tr), X_tr, np.nan)
+    X_te = np.where(np.isfinite(X_te), X_te, np.nan)
 
     clf = make_pipeline(
+        SimpleImputer(strategy="constant", fill_value=0.0),  # <-- главное
         StandardScaler(),
         LogisticRegression(max_iter=500, n_jobs=None)
     )
     clf.fit(X_tr, y_tr)
     proba = clf.predict_proba(X_te)[:, 1]
     y_pred = clf.predict(X_te)
-    report = {
+
+    from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
+    return {
         "acc": float(accuracy_score(y_te, y_pred)),
         "f1_macro": float(f1_score(y_te, y_pred, average="macro")),
         "roc_auc": float(roc_auc_score(y_te, proba))
     }
-    return report
+
     
         
        

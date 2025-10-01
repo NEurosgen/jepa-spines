@@ -6,7 +6,9 @@ from config import cfg, update_cfg
 from torch_geometric.datasets import ZINC, TUDataset
 from data_utils.exp import PlanarSATPairsDataset
 from transform import PositionalEncodingTransform, GraphJEPAPartitionTransform
-from labid_data import WightlessDS,SpineGraphDataset
+
+import datasets.labid_data
+import datasets.labid_spheric_data
 from torch.utils.data import DataLoader,random_split
 def calculate_stats(dataset):
     num_graphs = len(dataset)
@@ -78,13 +80,14 @@ def create_dataset(cfg,seed = None):
 
     elif cfg.dataset == 'labid':
         root_ds = 'data'
-        dataset = WightlessDS(root = root_ds)
+        dataset =  datasets.labid_data.WightlessDS(root = root_ds)
         n_total = len(dataset)
         n_val = int(cfg.data.val_ratio * n_total)
-        n_train = n_total - n_val
+    
+        n_train = n_total - n_val 
         train_ds, val_ds = random_split(dataset, [n_train, n_val],
                                         generator=torch.Generator().manual_seed(seed))
-        train_dataset = SpineGraphDataset(
+        train_dataset =  datasets.labid_data.SpineGraphDataset(
             ds=train_ds,
             knn=cfg.data.knn,
             count_per_item=cfg.data.count_per_item,
@@ -93,7 +96,49 @@ def create_dataset(cfg,seed = None):
             transform= transform_train,
             pre_transform = pre_transform
         )
-        val_dataset= SpineGraphDataset(
+        val_dataset=  datasets.labid_data.SpineGraphDataset(
+            ds=val_ds,
+            knn=cfg.data.knn,
+            count_per_item=10,
+            mode=cfg.data.mode,
+            gamma=cfg.data.gamma,
+            transform=transform_eval,
+            pre_transform=pre_transform
+        )
+    
+
+        root_test = 'Test'
+        test_prep =  datasets.labid_data.WightlessDS(root = root_test)
+
+
+        test_dataset =  datasets.labid_data.SpineGraphDataset(
+            ds=test_prep,
+            knn=cfg.data.knn,
+            count_per_item=0,
+            mode=cfg.data.mode,
+            gamma=cfg.data.gamma,
+            transform=transform_eval,
+            pre_transform=pre_transform
+        )
+        return train_dataset,val_dataset,test_dataset
+    elif cfg.dataset == 'labid_spheric':
+        root_ds = 'out'
+        dataset =  datasets.labid_spheric_data.WightlessDS(root = root_ds)
+        n_total = len(dataset)
+        n_val = int(cfg.data.val_ratio * n_total)
+        n_train = n_total - n_val
+        train_ds, val_ds = random_split(dataset, [n_train, n_val],
+                                        generator=torch.Generator().manual_seed(seed))
+        train_dataset = datasets.labid_spheric_data.SpineGraphDataset(
+            ds=train_ds,
+            knn=cfg.data.knn,
+            count_per_item=cfg.data.count_per_item,
+            mode=cfg.data.mode,
+            gamma=cfg.data.gamma,
+            transform= transform_train,
+            pre_transform = pre_transform
+        )
+        val_dataset=  datasets.labid_spheric_data.SpineGraphDataset(
             ds=val_ds,
             knn=cfg.data.knn,
             count_per_item=10,
@@ -104,21 +149,9 @@ def create_dataset(cfg,seed = None):
         )
 
         root_test = 'Test'
-        test_prep = WightlessDS(root = root_test)
+        
 
-
-        test_dataset = SpineGraphDataset(
-            ds=test_prep,
-            knn=cfg.data.knn,
-            count_per_item=0,
-            mode=cfg.data.mode,
-            gamma=cfg.data.gamma,
-            transform=transform_eval,
-            pre_transform=pre_transform
-        )
-
-
-        return train_dataset ,val_dataset,test_dataset
+        return train_dataset ,val_dataset,val_dataset
         
        
 
@@ -139,9 +172,9 @@ def create_dataset(cfg,seed = None):
 if __name__ == '__main__':
     print("Generating data")
 
-    cfg.merge_from_file('train/configs/zinc.yaml')
-    cfg = update_cfg(cfg)
-    cfg.metis.n_patches = 0
+    from omegaconf import OmegaConf
+
+    cfg = OmegaConf.load("train/configs/zinc.yaml")
     train_dataset, val_dataset, test_dataset = create_dataset(cfg)
 
     if cfg.dataset == 'exp-classify':

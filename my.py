@@ -101,12 +101,14 @@ from omegaconf import OmegaConf
 cfg = OmegaConf.load("train/configs/zinc.yaml")
 
 param_grid = {
-    "train.lr": [5e-4, 1e-3],
-    "model.hidden_size": [128, 256, 384],
-    "jepa.dist": [0, 1],     
+   
+         'model.nlayer_gnn':[1, 2,4],
+        'model.nlayer_mlpmixer': [1,2,4],
+        'model.hidden_size': [i for i in range(64,512,32)],
+
+
 }
-
-
+print(create_dataset(cfg))
 seeds = [cfg.seed + i for i in range(5)]  
 
 
@@ -122,4 +124,5 @@ sweep_experiments(
     sweep_name="lr_hidden_dist_grid",
     rank_metric="acc_mean",     # или "roc_auc_mean" / "f1_macro_mean" / что у тебя от linear_agg
     maximize=True,              # для accuracy/AUC/F1 — True
+    result_file='result_1'
 )

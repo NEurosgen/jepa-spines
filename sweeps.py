@@ -9,6 +9,18 @@ from omegaconf import OmegaConf, DictConfig
 
 
 from report_options import _flatten_trial_record
+def _assert_override_keys_exist(cfg: DictConfig, param_grid: Dict[str, Iterable[Any]]):
+    """
+    Проверяем, что все ключи из param_grid реально есть в cfg.
+    """
+    for key in param_grid.keys():
+        parts = key.split(".")
+        node = cfg
+        for p in parts[:-1]:
+            assert p in node, f"Invalid override '{key}': section '{p}' not found in config"
+            node = node[p]
+        last = parts[-1]
+        assert last in node, f"Invalid override '{key}': key '{last}' not found in config section {'.'.join(parts[:-1])}"
 
 def _param_grid_iter(grid: Dict[str, Iterable[Any]]) -> Iterable[Tuple[Dict[str, Any], str]]:
     """
@@ -55,7 +67,8 @@ def sweep_experiments(
     random_samples: Optional[int] = None,  
     random_seed: int = 123,
     rank_metric: Optional[str] = None,      
-    maximize: bool = True,                 
+    maximize: bool = True,    
+    result_file = 'result'             
 ) -> Dict[str, Any]:
     """
     Запускает серию трейлов (grid или random search) и собирает summary.json.
@@ -67,6 +80,7 @@ def sweep_experiments(
     - rank_metric: ключ из linear_agg, по которому выбрать лучший конфиг (например 'acc_mean')
     - maximize: если True — чем больше, тем лучше (accuracy/AUC); если False — меньше лучше (loss)
     """
+    _assert_override_keys_exist(base_cfg, param_grid)
     if seeds is None:
         seeds = [int(base_cfg.seed) + i for i in range(int(base_cfg.train.runs))]
 
@@ -76,7 +90,7 @@ def sweep_experiments(
 
     base = Path(out_dir or f"runs/{base_cfg.dataset}_jepa/sweeps/{sweep_name}")
     base.mkdir(parents=True, exist_ok=True)
-    results_jsonl = base / "results.jsonl"
+    results_jsonl = base /  (result_file + ".jsonl")
 
     (base / "_base_config.yaml").write_text(OmegaConf.to_yaml(base_cfg))
     (base / "_param_grid.json").write_text(json.dumps({k:list(v) for k,v in param_grid.items()}, indent=2))

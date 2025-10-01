@@ -10,4 +10,6 @@ logs/
 outputs/
 runs/
 results/
+exp_data/
+out/
 

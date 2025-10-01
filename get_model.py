@@ -70,6 +70,12 @@ def create_model(cfg):
         node_type = 'Linear'
         edge_type = 'Linear'
         nout = 3
+    elif cfg.dataset =='labid_spheric':
+        nfeat_node = 25
+        nfeat_edge = 0
+        node_type = 'Linear'
+        edge_type = 'Linear'
+        nout = 3
     if cfg.metis.n_patches > 0:
         if cfg.jepa.enable:
             return GraphJepa(
