@@ -1,15 +1,26 @@
 import os
-import torch
 import random
 import time
+from datetime import datetime
+from pathlib import Path
+
 import numpy as np
-from src.logger.log import config_logger
-from src.model_utils.asam import ASAM
+import torch
+from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.loader import DataLoader
-from sklearn.model_selection import StratifiedKFold
 from sklearn.linear_model import Ridge, LogisticRegression
 from sklearn.metrics import accuracy_score, mean_absolute_error
-from src.estimate_representation.representation_metrtic import load_model,fit_and_eval_linear,encode_repr,plot_umap_2d
+from sklearn.model_selection import StratifiedKFold
+
+from src.estimate_representation.representation_metrtic import (
+    encode_repr,
+    fit_and_eval_linear,
+    load_model,
+    plot_umap_2d,
+)
+from src.model_utils.asam import ASAM
+
+
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -30,6 +41,20 @@ def get_report_model(model , train_loader ,val_loader ,device):
     lin_report =fit_and_eval_linear(X_tr=X_train, y_tr=y_train, X_te=X_val, y_te=y_val)
     return lin_report
 
+def _create_summary_writer(cfg):
+    """Create a tensorboard SummaryWriter if logging is enabled in the config."""
+
+    log_root = getattr(cfg, "log_dir", "runs")
+    if log_root in (None, ""):
+        return None
+
+    log_root = Path(log_root).expanduser()
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_dir = log_root / str(cfg.dataset) / timestamp
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return SummaryWriter(log_dir=str(log_dir))
+
+
 def run(cfg, create_dataset, create_model, train, test, evaluator=None):
     if cfg.seed is not None:
         seeds = [cfg.seed]
@@ -37,8 +62,8 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
     else:
         seeds = [21, 42, 41, 95, 12, 35, 66, 85, 3, 1234]
 
-   # writer, logger = config_logger(cfg)
-   
+    writer = _create_summary_writer(cfg)
+
     train_dataset, val_dataset, test_dataset = create_dataset(cfg)
     train_loader = DataLoader(
         train_dataset, cfg.train.batch_size, shuffle=True, num_workers=cfg.num_workers)
@@ -82,22 +107,45 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
         for epoch in range(cfg.train.epochs):
             start = time.time()
             model.train()
+            momentum_weight = next(momentum_scheduler)
             _, train_loss = train(
-                train_loader, model, optimizer if not sharp else minimizer, \
-                    evaluator=evaluator, device=cfg.device, momentum_weight=next(momentum_scheduler),\
-                    sharp=sharp, criterion_type=cfg.jepa.dist)
+                train_loader, model, optimizer if not sharp else minimizer,
+                evaluator=evaluator, device=cfg.device, momentum_weight=momentum_weight,
+                sharp=sharp, criterion_type=cfg.jepa.dist)
             model.eval()
-            _, val_loss = test(val_loader, model,
-                                      evaluator=evaluator, device=cfg.device, criterion_type=cfg.jepa.dist)
-            _, test_loss = test(test_loader, model,
-                                      evaluator=evaluator, device=cfg.device, criterion_type=cfg.jepa.dist)
+            _, train_eval_loss = test(
+                train_loader, model, evaluator=evaluator, device=cfg.device,
+                criterion_type=cfg.jepa.dist)
+            _, val_loss = test(
+                val_loader, model, evaluator=evaluator, device=cfg.device,
+                criterion_type=cfg.jepa.dist)
+            _, test_loss = test(
+                test_loader, model, evaluator=evaluator, device=cfg.device,
+                criterion_type=cfg.jepa.dist)
             time_cur_epoch = time.time() - start
             per_epoch_time.append(time_cur_epoch)
 #            report = get_report_model(model,train_loader=train_loader,val_loader=val_loader,device=str(cfg.device))
-            print(f"Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Val: {val_loss:.4f}, Test: {test_loss:.4f} Seconds: {time_cur_epoch:.4f}")
+            print(
+                f"Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, "
+                f"Train Eval: {train_eval_loss:.4f}, Val: {val_loss:.4f}, "
+                f"Test: {test_loss:.4f} Seconds: {time_cur_epoch:.4f}"
+            )
 
-            #writer.add_scalar(f'Run{run}/train-loss', train_loss, epoch)
-            #writer.add_scalar(f'Run{run}/val-loss', val_loss, epoch)
+            if writer is not None:
+                run_prefix = f"run{run}"
+                writer.add_scalar(f"{run_prefix}/loss/train", train_loss, epoch)
+                writer.add_scalar(f"{run_prefix}/loss/train_eval", train_eval_loss, epoch)
+                writer.add_scalar(f"{run_prefix}/loss/val", val_loss, epoch)
+                writer.add_scalar(f"{run_prefix}/loss/test", test_loss, epoch)
+                writer.add_scalar(f"{run_prefix}/time/epoch_seconds", time_cur_epoch, epoch)
+                writer.add_scalar(
+                    f"{run_prefix}/optimizer/lr",
+                    optimizer.param_groups[0]['lr'],
+                    epoch,
+                )
+                writer.add_scalar(
+                    f"{run_prefix}/optimizer/momentum_weight", momentum_weight, epoch
+                )
 
             if scheduler is not None:
                 scheduler.step(val_loss)
@@ -167,6 +215,10 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
         train_losses.append(train_loss)
         per_epoch_times.append(per_epoch_time)
         total_times.append(total_time)
+
+    if writer is not None:
+        writer.flush()
+        writer.close()
 
     if cfg.train.runs > 1:
         train_loss = torch.tensor(train_losses)

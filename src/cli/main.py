@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -81,7 +83,13 @@ def test(loader, model, evaluator, device, criterion_type=0):
     return None, epoch_loss
 
 
-@hydra.main(version_base=None,config_path="/home/eugen/Desktop/CodeWork/Projects/Diplom/notebooks/JepaAE/conf", config_name="config")
+# NOTE: Resolve the configuration directory relative to this file so the
+# application can be executed from any working directory without relying on the
+# original developer's absolute paths.
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "conf"
+
+
+@hydra.main(version_base=None, config_path=str(CONFIG_PATH), config_name="config")
 def main(cfg: DictConfig):
     run(cfg, create_dataset=create_dataset, create_model=create_model, train=train,test= test)
     
