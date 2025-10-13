@@ -1,60 +1,59 @@
-seed: 4
+
+seed: 42
+checkpoint: true
+dataset: microns_classic_feat  
+num_workers: 4
+model:
+  gMHA_type: Hadamard
+  gnn_type: GCNConv
+  nlayer_gnn: 1
+  nlayer_mlpmixer: 2
+  hidden_size: 232
+  pool: 'mean'
+  ctx_as_target_prob: 0.2
+train:
+  optimizer:
+  wd: 0.001
+  dropout: 0.2
+  mlpmixer_dropout: 0.1
+  lr_patience: 20
+  epochs: 10
+  batch_size: 128
+  lr: 0.0005
+  runs: 3
+  lr_decay: 0.8
+  min_lr: 1e-8
+metis:
+  n_patches: 3
+  enable: true
+  drop_rate: 0.1
+  num_hops: 2
+
+pos_enc:
+  rw_dim: 2
+  patch_rw_dim: 2
+  lap_dim: 0
+  patch_num_diff: 0
+device: 'cuda'
+
+jepa:
+  dist: 1
+  enable: true
+  num_context: 1
+  num_targets: 1
+
 
 data:
   root: /home/eugen/Desktop/CodeWork/Projects/Diplom/notebooks/JepaAE/data
-  knn: 3
-  count_per_item: 30
+  knn: 4
+  count_per_item: 0
   mode: CopiedGraphs         # RandomPermutate | CopiedGraphs | MarkovGraphs
-  gamma: 0.5
-  val_ratio: 0.3
+  gamma: 0.2
+  val_ratio: 0.5
   max_patches: 3           
   norm:
     method: zscore
     attr: x
 
-model:
-  num_features: 25          
-  latent_dim: 50
-  predictor_hidden_dim: 10
-  pred_layers: 1
-  dropout: 0.1
-  pe_dim: 6
-  use_metis: true
-  per_graph: false
-  include_context_in_pool: true
-  use_encoder: student       # "teacher" | "student"
-  lr: 1e-5
-
-cutter:
-  strategy:
-    ctx_mode: khop
-    ctx_param: 1
-    tgt_mode: khop
-    tgt_param: 1
-
-trainer:
-  batch_size: 10
-  max_epochs: 1
-
-  gradient_clip_val: 1.0
-  log_every_n_steps: 20
-  num_workers: 0
-  pin_memory: false
-  detect_anomaly: false
-  monitor_metric: "val_loss"   
-  monitor_mode: "min"
-  early_stopping:
-    enabled: true
-    patience: 15
-    min_delta: 0.0
-
-experiments:
-  grid: 
-   trainer.batch_size: [1,2,4,6,8,10]
-
-
-
-
-  latent_rules: 
-
-
+logfile: 
+depth : 3
