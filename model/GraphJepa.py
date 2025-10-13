@@ -9,7 +9,8 @@ import model_utils.gMHA_wrapper as gMHA_wrapper
 from model_utils.elements import MLP
 from model_utils.feature_encoder import FeatureEncoder
 from model_utils.gnn import GNN
-
+from  logger.diagnostics import tstats, assert_finite
+from logger.logging_utils import logging
 class GraphJepa(nn.Module):
 
     def __init__(self,
@@ -30,9 +31,14 @@ class GraphJepa(nn.Module):
                  n_patches=32,
                  patch_rw_dim=0,
                  num_context_patches=1,
-                 num_target_patches=4):
+                 num_target_patches=4,
+                 debug=False,logger=None):
 
         super().__init__()
+        self.debug = debug
+        self.logger = logger
+        if self.debug and self.logger is not None:
+            self.logger.info("GraphJepa initialized in DEBUG mode")
         self.dropout = dropout
         self.use_rw = rw_dim > 0
         self.use_lap = lap_dim > 0
@@ -76,12 +82,26 @@ class GraphJepa(nn.Module):
         #     nhid, 2, nlayer=3, with_final_activation=False, with_norm=False)
 
     def forward(self, data):
-       
+        log = self.logger
+        if self.debug and log is not None:
+            log.debug("=== GraphJepa.forward start ===")
+            # ключевые поля data
+            for k in ["x","edge_index","edge_attr","subgraphs_nodes_mapper","subgraphs_edges_mapper",
+                    "combined_subgraphs","subgraphs_batch","rw_pos_enc","mask",
+                    "context_subgraph_idx","target_subgraph_idxs","coarsen_adj","call_n_patches"]:
+                if hasattr(data, k):
+                    v = getattr(data, k)
+                    tstats(v, f"data.{k}", log)
+
+
         x = self.input_encoder(data.x).squeeze()
-        
+        if self.debug and log is not None:
+            tstats(x, "x(enc)", log)
+            assert_finite(x, "x(encoded)", log)
         edge_attr = data.edge_attr
-       
         if edge_attr is None:
+            if self.debug and log is not None:
+                log.info("edge_attr is None -> making zeros")
             edge_attr = data.edge_index.new_zeros(data.edge_index.size(-1)).float().unsqueeze(-1)
         
         #edge_attr = self.edge_encoder(edge_attr)
@@ -107,17 +127,20 @@ class GraphJepa(nn.Module):
                 x = scatter(x, data.subgraphs_nodes_mapper,
                             dim=0, reduce='mean')[data.subgraphs_nodes_mapper]
             x = gnn(x, edge_index, None)
+            if self.debug and log is not None:
+                tstats(x, f"x(after GNN {i})", log)
+                assert_finite(x, f"x(after GNN {i})", log)
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
 
 
         ######################## Graph-JEPA ########################
         # Create the correct indexer for each subgraph given the batching procedure
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches))
-        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y.device)
+        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.x.device)
 
         # Get idx of context and target subgraphs according to masks
         context_subgraph_idx = data.context_subgraph_idx + batch_indexer
-        target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y.device)
+        target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.x.device)
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
 
         # Get context and target subgraph (mpnn) embeddings
@@ -159,10 +182,15 @@ class GraphJepa(nn.Module):
             y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
             target_x = torch.cat([x_coord, y_coord], dim=-1)
 
-
+        if self.debug and log is not None:
+            tstats(target_x, "target_x(teacher)", log)
         # Make predictions using the target predictor: for each target subgraph, we use the context + the target PE
         target_prediction_embeddings = context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid)
         target_y = self.target_predictor(target_prediction_embeddings)
+        if self.debug and log is not None:
+            tstats(target_y, "target_y(student)", log)
+            assert_finite(target_y, "target_y(student)", log)
+            log.debug("=== GraphJepa.forward end ===")
        
         return target_x, target_y
 

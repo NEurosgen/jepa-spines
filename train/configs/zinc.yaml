@@ -1,7 +1,7 @@
 
 seed: 42
 checkpoint: true
-dataset: labid
+dataset: microns_classic_feat  
 num_workers: 4
 model:
   gMHA_type: Hadamard
@@ -10,20 +10,21 @@ model:
   nlayer_mlpmixer: 2
   hidden_size: 232
   pool: 'mean'
+  ctx_as_target_prob: 0.2
 train:
   optimizer:
   wd: 0.001
   dropout: 0.2
   mlpmixer_dropout: 0.1
   lr_patience: 20
-  epochs: 5
+  epochs: 10
   batch_size: 128
   lr: 0.0005
   runs: 3
   lr_decay: 0.8
   min_lr: 1e-8
 metis:
-  n_patches: 4
+  n_patches: 3
   enable: true
   drop_rate: 0.1
   num_hops: 2
@@ -44,9 +45,9 @@ jepa:
 
 data:
   root: /home/eugen/Desktop/CodeWork/Projects/Diplom/notebooks/JepaAE/data
-  knn: 3
-  count_per_item: 40
-  mode: MarkovGraphs         # RandomPermutate | CopiedGraphs | MarkovGraphs
+  knn: 4
+  count_per_item: 0
+  mode: CopiedGraphs         # RandomPermutate | CopiedGraphs | MarkovGraphs
   gamma: 0.2
   val_ratio: 0.5
   max_patches: 3           

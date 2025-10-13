@@ -9,6 +9,7 @@ from transform import PositionalEncodingTransform, GraphJEPAPartitionTransform
 
 import datasets.labid_data
 import datasets.labid_spheric_data
+import datasets.microns_spheric_dataset
 from torch.utils.data import DataLoader,random_split
 def calculate_stats(dataset):
     num_graphs = len(dataset)
@@ -16,7 +17,7 @@ def calculate_stats(dataset):
     ave_num_edges = np.array([g.num_edges for g in dataset]).mean()
     print(
         f'# Graphs: {num_graphs}, average # nodes per graph: {ave_num_nodes}, average # edges per graph: {ave_num_edges}.')
-
+from datasets.normalize_nodes import NodeFeatureNormalizer
 
 def create_dataset(cfg,seed = None):
     if seed is None:
@@ -75,6 +76,101 @@ def create_dataset(cfg,seed = None):
         dataset = PlanarSATPairsDataset(root, pre_transform=pre_transform)
         return dataset, transform_train, transform_eval
     
+    elif cfg.dataset == 'microns_data':
+        root_ds = '/home/eugen/Desktop/CodeWork/Projects/Diplom/notebooks/NewFearuteModel/DataFT/knn_components'
+        dataset =  datasets.microns_spheric_dataset.WightlessDS(root = root_ds)
+        n_total = len(dataset)
+        n_val = int(cfg.data.val_ratio * n_total)
+    
+        ## TODO Нормировку сделай а то градиенты взрываются
+
+        
+        state = torch.load("node_norm_stats.pt", map_location="cpu")
+        val_normalizer = NodeFeatureNormalizer.from_state_dict(state)
+        
+        n_train = n_total - n_val 
+        train_ds, val_ds = random_split(dataset, [n_train, n_val],
+                                        generator=torch.Generator().manual_seed(seed))
+        train_dataset =  datasets.microns_spheric_dataset.SpineGraphDataset(
+            ds=train_ds,
+            count_per_item=cfg.data.count_per_item,
+            mode=cfg.data.mode,
+            gamma=cfg.data.gamma,
+            transform= transform_train,
+            pre_transform = Compose([val_normalizer, pre_transform])
+        )
+        val_dataset=  datasets.microns_spheric_dataset.SpineGraphDataset(
+            ds=val_ds,
+            count_per_item=0,
+            mode=cfg.data.mode,
+            gamma=cfg.data.gamma,
+            transform=transform_eval,
+            pre_transform=Compose([val_normalizer, pre_transform])
+        )
+    
+
+        root_test = 'Test'
+        test_prep =  datasets.labid_data.WightlessDS(root = root_test)
+
+
+        test_dataset =  datasets.labid_data.SpineGraphDataset(
+            ds=test_prep,
+            count_per_item=0,
+            mode=cfg.data.mode,
+            gamma=cfg.data.gamma,
+            transform=transform_eval,
+          #  pre_transform=Compose([val_normalizer, pre_transform])
+        )
+        return train_dataset,val_dataset,val_dataset     
+
+    elif cfg.dataset == 'microns_classic_feat':
+        root_ds = '/home/eugen/Desktop/CodeWork/Projects/Diplom/notebooks/notebooks/classical_feat_out'
+        dataset =  datasets.microns_spheric_dataset.WightlessDS(root = root_ds)
+        n_total = len(dataset)
+        n_val = int(cfg.data.val_ratio * n_total)
+    
+        ## TODO Нормировку сделай а то градиенты взрываются
+
+        
+        state = torch.load("node_norm_stats.pt", map_location="cpu")
+        val_normalizer = NodeFeatureNormalizer.from_state_dict(state)
+        
+        n_train = n_total - n_val 
+        train_ds, val_ds = random_split(dataset, [n_train, n_val],
+                                        generator=torch.Generator().manual_seed(seed))
+        train_dataset =  datasets.microns_spheric_dataset.SpineGraphDataset(
+            ds=train_ds,
+            count_per_item=cfg.data.count_per_item,
+            mode=cfg.data.mode,
+            gamma=cfg.data.gamma,
+            transform= transform_train,
+            pre_transform = Compose([val_normalizer, pre_transform]),classical_feat=True
+        )
+        val_dataset=  datasets.microns_spheric_dataset.SpineGraphDataset(
+            ds=val_ds,
+            count_per_item=0,
+            mode=cfg.data.mode,
+            gamma=cfg.data.gamma,
+            transform=transform_eval,
+            pre_transform=Compose([val_normalizer, pre_transform]),classical_feat=True
+        )
+    
+
+        # root_test = 'Test'
+        # test_prep =  datasets.labid_data.WightlessDS(root = root_test)
+
+
+        # test_dataset =  datasets.labid_data.SpineGraphDataset(
+        #     ds=test_prep,
+        #     count_per_item=0,
+        #     mode=cfg.data.mode,
+        #     gamma=cfg.data.gamma,
+        #     transform=transform_eval,
+        #   #  pre_transform=Compose([val_normalizer, pre_transform])
+        # )
+        return train_dataset,val_dataset,val_dataset   
+
+
 
 
 

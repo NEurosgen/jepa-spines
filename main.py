@@ -61,6 +61,7 @@ def train(train_loader, model, optimizer, evaluator, device, momentum_weight, sh
 def test(loader, model, evaluator, device, criterion_type=0):
     criterion = torch.nn.SmoothL1Loss(beta=0.5)
     step_losses, num_targets = [], []
+   # print(model)
     for data in loader:
         data = data.to(device)
         target_x, target_y = model(data)

@@ -1,6 +1,6 @@
 from model.GraphJepa import GraphJepa
 import sys
-
+from logger.logging_utils import setup_logger
 def create_model(cfg):
     if cfg.dataset == 'ZINC':
         node_type = 'Discrete'
@@ -64,13 +64,13 @@ def create_model(cfg):
         node_type = 'Linear'
         edge_type = 'Linear'
         nout = 3
-    elif cfg.dataset =='labid':
+    elif cfg.dataset =='labid' or cfg.dataset == 'microns_classic_feat':
         nfeat_node = 13
         nfeat_edge = 0
         node_type = 'Linear'
         edge_type = 'Linear'
         nout = 3
-    elif cfg.dataset =='labid_spheric':
+    elif cfg.dataset =='labid_spheric' or cfg.dataset =='microns_data' :
         nfeat_node = 25
         nfeat_edge = 0
         node_type = 'Linear'
@@ -78,6 +78,9 @@ def create_model(cfg):
         nout = 3
     if cfg.metis.n_patches > 0:
         if cfg.jepa.enable:
+            
+
+            logger = setup_logger(name="graphjepa", log_dir="logs", filename="train.log")
             return GraphJepa(
                 nfeat_node=nfeat_node,
                 nfeat_edge=nfeat_edge,
@@ -97,7 +100,9 @@ def create_model(cfg):
                 n_patches=cfg.metis.n_patches,
                 patch_rw_dim=cfg.pos_enc.patch_rw_dim,
                 num_context_patches=cfg.jepa.num_context,
-                num_target_patches=cfg.jepa.num_targets
+                num_target_patches=cfg.jepa.num_targets,
+                debug=False,
+                logger=logger
             ) 
         else:
             print('Not supported...')

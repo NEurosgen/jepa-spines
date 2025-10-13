@@ -92,11 +92,10 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
                                       evaluator=evaluator, device=cfg.device, criterion_type=cfg.jepa.dist)
             _, test_loss = test(test_loader, model,
                                       evaluator=evaluator, device=cfg.device, criterion_type=cfg.jepa.dist)
-
             time_cur_epoch = time.time() - start
             per_epoch_time.append(time_cur_epoch)
-            report = get_report_model(model,train_loader=train_loader,val_loader=val_loader,device=str(cfg.device))
-            print(f"Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Val: {val_loss:.4f}, Test: {test_loss:.4f} Seconds: {time_cur_epoch:.4f},acc:{report['acc']:.4f},f1:{report['f1_macro']:.4f}")
+#            report = get_report_model(model,train_loader=train_loader,val_loader=val_loader,device=str(cfg.device))
+            print(f"Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}, Val: {val_loss:.4f}, Test: {test_loss:.4f} Seconds: {time_cur_epoch:.4f}")
 
             #writer.add_scalar(f'Run{run}/train-loss', train_loss, epoch)
             #writer.add_scalar(f'Run{run}/val-loss', val_loss, epoch)
@@ -132,39 +131,39 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
             with torch.no_grad():
                 features = model.encode(data)
                 X_train.append(features.detach().cpu().numpy())
-                y_train.append(data.y.detach().cpu().numpy())
+                #y_train.append(data.y.detach().cpu().numpy())
 
         # Concatenate the lists into numpy arrays
         X_train = np.concatenate(X_train, axis=0)
-        y_train = np.concatenate(y_train, axis=0)
+        #y_train = np.concatenate(y_train, axis=0)
 
         for data in test_loader:
             data.to(cfg.device)
             with torch.no_grad():
                 features = model.encode(data)
                 X_test.append(features.detach().cpu().numpy())
-                y_test.append(data.y.detach().cpu().numpy())
+                #y_test.append(data.y.detach().cpu().numpy())
 
         # Concatenate the lists into numpy arrays
         X_test = np.concatenate(X_test, axis=0)
-        y_test = np.concatenate(y_test, axis=0)
+        #y_test = np.concatenate(y_test, axis=0)
 
-        print("Data shapes:", X_train.shape, y_train.shape, X_test.shape, y_test.shape)
+        #print("Data shapes:", X_train.shape, y_train.shape, X_test.shape, y_test.shape)
 
         # Fine tuning on the learned representations via Ridge Regression
-        lin_model = Ridge()
-        lin_model.fit(X_train, y_train)
-        lin_predictions = lin_model.predict(X_test)
-        lin_mae = mean_absolute_error(y_test, lin_predictions)
-        maes.append(lin_mae)
+        #lin_model = Ridge()
+        #lin_model.fit(X_train, y_train)
+        #lin_predictions = lin_model.predict(X_test)
+        #lin_mae = mean_absolute_error(y_test, lin_predictions)
+        #maes.append(lin_mae)
 
         print("\nRun: ", run)
         print("Train Loss: {:.4f}".format(train_loss))
         print("Convergence Time (Epochs): {}".format(epoch+1))
         print("AVG TIME PER EPOCH: {:.4f} s".format(per_epoch_time))
         print("TOTAL TIME TAKEN: {:.4f} h".format(total_time))
-        print(f'Train R2.: {lin_model.score(X_train, y_train)}')
-        print(f'MAE.: {lin_mae}')
+        #print(f'Train R2.: {lin_model.score(X_train, y_train)}')
+        #print(f'MAE.: {lin_mae}')
 
         train_losses.append(train_loss)
         per_epoch_times.append(per_epoch_time)
@@ -182,8 +181,8 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
         #logger.info(f'\nFinal Train Loss: {train_loss.mean():.4f} ± {train_loss.std():.4f}'
                #     f'\nSeconds/epoch: {per_epoch_time.mean():.4f}'
                 #    f'\nHours/total: {total_time.mean():.4f}')
-        maes = np.array(maes)
-        print(f'MAE avg: {maes.mean()}, std: {maes.std()}')
+        #maes = np.array(maes)
+        #print(f'MAE avg: {maes.mean()}, std: {maes.std()}')
 
 def count_parameters(model):
     # For counting number of parameteres: need to remove unnecessary DiscreteEncoder, and other additional unused params
