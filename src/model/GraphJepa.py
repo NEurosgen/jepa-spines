@@ -73,9 +73,9 @@ class GraphJepa(nn.Module):
         self.target_encoder = getattr(gMHA_wrapper, gMHA_type)(
             nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer, n_patches=n_patches)
 
-        # Predictor
+        # Predictor — match the latent dimensionality of the teacher features
         self.target_predictor = MLP(
-            nhid, 232, nlayer=3, with_final_activation=False, with_norm=False)
+            nhid, nhid, nlayer=3, with_final_activation=False, with_norm=False)
 
         # Use this predictor if you wish to do euclidean or poincaré embeddings in the latent space
         # self.target_predictor = MLP(
