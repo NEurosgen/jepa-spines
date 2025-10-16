@@ -125,15 +125,17 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
         # Create EMA scheduler for target encoder param update
         ipe = len(train_loader)
         ema_params = [0.998, 1.0]
-        momentum_scheduler = (ema_params[0] + i*(ema_params[1]-ema_params[0])/(ipe*cfg.train.epochs)
-                            for i in range(int(ipe*cfg.train.epochs)+1))
+        momentum_scheduler = iter(
+            ema_params[0] + i * (ema_params[1] - ema_params[0]) / (ipe * cfg.train.epochs)
+            for i in range(int(ipe * cfg.train.epochs) + 1)
+        )
         for epoch in range(cfg.train.epochs):
             start = time.time()
             model.train()
-            momentum_weight = next(momentum_scheduler)
-            _, train_loss = train(
+            _, train_loss, last_momentum = train(
                 train_loader, model, optimizer if not sharp else minimizer,
-                evaluator=evaluator, device=cfg.device, momentum_weight=momentum_weight,
+                evaluator=evaluator, device=cfg.device,
+                momentum_scheduler=momentum_scheduler,
                 sharp=sharp, criterion_type=cfg.jepa.dist)
             model.eval()
             _, train_eval_loss = test(
@@ -166,9 +168,10 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
                     optimizer.param_groups[0]['lr'],
                     epoch,
                 )
-                writer.add_scalar(
-                    f"{run_prefix}/optimizer/momentum_weight", momentum_weight, epoch
-                )
+                if last_momentum is not None:
+                    writer.add_scalar(
+                        f"{run_prefix}/optimizer/momentum_weight", last_momentum, epoch
+                    )
 
             if scheduler is not None:
                 scheduler.step(val_loss)
@@ -326,19 +329,21 @@ def run_k_fold(cfg, create_dataset, create_model, train, test, evaluator=None, k
             # Create EMA scheduler for target encoder param update
             ipe = len(train_loader)
             ema_params = [0.996, 1.0]
-            momentum_scheduler = (ema_params[0] + i*(ema_params[1]-ema_params[0])/(ipe*cfg.train.epochs)
-                                for i in range(int(ipe*cfg.train.epochs)+1))
-            
+            momentum_scheduler = iter(
+                ema_params[0] + i * (ema_params[1] - ema_params[0]) / (ipe * cfg.train.epochs)
+                for i in range(int(ipe * cfg.train.epochs) + 1)
+            )
+
             for epoch in range(cfg.train.epochs):
                 start = time.time()
                 model.train()
-                _, train_loss = train(
-                    train_loader, model, optimizer, 
-                    evaluator=evaluator, device=cfg.device, 
-                    momentum_weight=next(momentum_scheduler), criterion_type=cfg.jepa.dist)
+                _, train_loss, last_momentum = train(
+                    train_loader, model, optimizer,
+                    evaluator=evaluator, device=cfg.device,
+                    momentum_scheduler=momentum_scheduler, criterion_type=cfg.jepa.dist)
                 model.eval()
                 _, test_loss = test(
-                    test_loader, model, evaluator=evaluator, device=cfg.device, 
+                    test_loader, model, evaluator=evaluator, device=cfg.device,
                     criterion_type=cfg.jepa.dist)
 
                 scheduler.step(test_loss)
@@ -349,6 +354,8 @@ def run_k_fold(cfg, create_dataset, create_model, train, test, evaluator=None, k
                       f' Test Loss:{test_loss:.4f}, Seconds: {time_cur_epoch:.4f}, ')
                 writer.add_scalar(f'Run{run}/train-loss', train_loss, epoch)
                 writer.add_scalar(f'Run{run}/test-loss', test_loss, epoch)
+                if last_momentum is not None:
+                    writer.add_scalar(f'Run{run}/momentum_weight', last_momentum, epoch)
 
                 if optimizer.param_groups[0]['lr'] < cfg.train.min_lr:
                     print("!! LR EQUAL TO MIN LR SET.")
