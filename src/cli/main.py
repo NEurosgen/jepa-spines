@@ -18,11 +18,30 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 
 
 
-def train(train_loader, model, optimizer, evaluator, device, momentum_weight, sharp=None, criterion_type=0):
+def train(
+    train_loader,
+    model,
+    optimizer,
+    evaluator,
+    device,
+    momentum_weight=None,
+    momentum_scheduler=None,
+    sharp=None,
+    criterion_type=0,
+):
 
     criterion = torch.nn.SmoothL1Loss(beta=0.5)
     step_losses, num_targets = [], []
+    last_momentum = None
     for data in train_loader:
+        if momentum_scheduler is not None:
+            try:
+                momentum_weight = next(momentum_scheduler)
+            except StopIteration:
+                momentum_weight = 1.0
+        if momentum_weight is None:
+            raise ValueError("Momentum weight must be provided for target encoder update.")
+        last_momentum = momentum_weight
         if model.use_lap: # Sign flips for eigenvalue PEs
             batch_pos_enc = data.lap_pos_enc
             sign_flip = torch.rand(batch_pos_enc.size(1))
@@ -54,9 +73,9 @@ def train(train_loader, model, optimizer, evaluator, device, momentum_weight, sh
         with torch.no_grad():
             for param_q, param_k in zip(model.context_encoder.parameters(), model.target_encoder.parameters()):
                 param_k.data.mul_(momentum_weight).add_((1.-momentum_weight) * param_q.detach().data)
-        
+
     epoch_loss = np.average(step_losses, weights=num_targets)
-    return None, epoch_loss # Leave none for now since maybe we'd like to return the embeddings for visualization
+    return None, epoch_loss, last_momentum # Leave none for now since maybe we'd like to return the embeddings for visualization
 
 
 @ torch.no_grad()

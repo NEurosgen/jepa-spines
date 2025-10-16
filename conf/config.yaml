@@ -1,8 +1,9 @@
 
 seed: 42
 checkpoint: true
-dataset: microns_classic_feat  
+dataset: microns_classic_feat
 num_workers: 4
+evaluate_representation: false
 model:
   gMHA_type: Hadamard
   gnn_type: GCNConv

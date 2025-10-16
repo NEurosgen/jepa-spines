@@ -79,6 +79,7 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
         seeds = [21, 42, 41, 95, 12, 35, 66, 85, 3, 1234]
 
     writer = _create_summary_writer(cfg)
+    evaluate_representation = bool(cfg.get("evaluate_representation", False))
 
     train_dataset, val_dataset, test_dataset = create_dataset(cfg)
     train_loader = DataLoader(
@@ -91,7 +92,6 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
     train_losses = []
     per_epoch_times = []
     total_times = []
-    maes = []
     for run in range(cfg.train.runs):
         set_seed(seeds[run])
         model = create_model(cfg).to(cfg.device)
@@ -125,15 +125,17 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
         # Create EMA scheduler for target encoder param update
         ipe = len(train_loader)
         ema_params = [0.998, 1.0]
-        momentum_scheduler = (ema_params[0] + i*(ema_params[1]-ema_params[0])/(ipe*cfg.train.epochs)
-                            for i in range(int(ipe*cfg.train.epochs)+1))
+        momentum_scheduler = iter(
+            ema_params[0] + i * (ema_params[1] - ema_params[0]) / (ipe * cfg.train.epochs)
+            for i in range(int(ipe * cfg.train.epochs) + 1)
+        )
         for epoch in range(cfg.train.epochs):
             start = time.time()
             model.train()
-            momentum_weight = next(momentum_scheduler)
-            _, train_loss = train(
+            _, train_loss, last_momentum = train(
                 train_loader, model, optimizer if not sharp else minimizer,
-                evaluator=evaluator, device=cfg.device, momentum_weight=momentum_weight,
+                evaluator=evaluator, device=cfg.device,
+                momentum_scheduler=momentum_scheduler,
                 sharp=sharp, criterion_type=cfg.jepa.dist)
             model.eval()
             _, train_eval_loss = test(
@@ -166,9 +168,10 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
                     optimizer.param_groups[0]['lr'],
                     epoch,
                 )
-                writer.add_scalar(
-                    f"{run_prefix}/optimizer/momentum_weight", momentum_weight, epoch
-                )
+                if last_momentum is not None:
+                    writer.add_scalar(
+                        f"{run_prefix}/optimizer/momentum_weight", last_momentum, epoch
+                    )
 
             if scheduler is not None:
                 scheduler.step(val_loss)
@@ -193,39 +196,40 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
         # }    , "checkpoints/checkpoint.ckpt")
 
 
-        X_train, y_train = [], []
-        X_test, y_test = [], []
-        ### Extracting training features and labels in Scikit-Learn form
-        for data in train_loader:
-            data.to(cfg.device)
-            with torch.no_grad():
-                features = model.encode(data)
-                X_train.append(features.detach().cpu().numpy())
-                #y_train.append(data.y.detach().cpu().numpy())
+        if evaluate_representation:
+            X_train, y_train = [], []
+            X_test, y_test = [], []
+            ### Extracting training features and labels in Scikit-Learn form
+            for data in train_loader:
+                data.to(cfg.device)
+                with torch.no_grad():
+                    features = model.encode(data)
+                    X_train.append(features.detach().cpu().numpy())
+                    #y_train.append(data.y.detach().cpu().numpy())
 
-        # Concatenate the lists into numpy arrays
-        X_train = np.concatenate(X_train, axis=0)
-        #y_train = np.concatenate(y_train, axis=0)
+            # Concatenate the lists into numpy arrays
+            X_train = np.concatenate(X_train, axis=0)
+            #y_train = np.concatenate(y_train, axis=0)
 
-        for data in test_loader:
-            data.to(cfg.device)
-            with torch.no_grad():
-                features = model.encode(data)
-                X_test.append(features.detach().cpu().numpy())
-                #y_test.append(data.y.detach().cpu().numpy())
+            for data in test_loader:
+                data.to(cfg.device)
+                with torch.no_grad():
+                    features = model.encode(data)
+                    X_test.append(features.detach().cpu().numpy())
+                    #y_test.append(data.y.detach().cpu().numpy())
 
-        # Concatenate the lists into numpy arrays
-        X_test = np.concatenate(X_test, axis=0)
-        #y_test = np.concatenate(y_test, axis=0)
+            # Concatenate the lists into numpy arrays
+            X_test = np.concatenate(X_test, axis=0)
+            #y_test = np.concatenate(y_test, axis=0)
 
-        #print("Data shapes:", X_train.shape, y_train.shape, X_test.shape, y_test.shape)
+            #print("Data shapes:", X_train.shape, y_train.shape, X_test.shape, y_test.shape)
 
-        # Fine tuning on the learned representations via Ridge Regression
-        #lin_model = Ridge()
-        #lin_model.fit(X_train, y_train)
-        #lin_predictions = lin_model.predict(X_test)
-        #lin_mae = mean_absolute_error(y_test, lin_predictions)
-        #maes.append(lin_mae)
+            # Fine tuning on the learned representations via Ridge Regression
+            #lin_model = Ridge()
+            #lin_model.fit(X_train, y_train)
+            #lin_predictions = lin_model.predict(X_test)
+            #lin_mae = mean_absolute_error(y_test, lin_predictions)
+            #maes.append(lin_mae)
 
         print("\nRun: ", run)
         print("Train Loss: {:.4f}".format(train_loss))
@@ -281,6 +285,7 @@ def run_k_fold(cfg, create_dataset, create_model, train, test, evaluator=None, k
         seeds = [42, 21, 95, 12, 35]
 
     writer, logger = config_logger(cfg)
+    evaluate_representation = bool(cfg.get("evaluate_representation", False))
     dataset, transform, transform_eval = create_dataset(cfg)
 
     if hasattr(dataset, 'train_indices'):
@@ -294,7 +299,7 @@ def run_k_fold(cfg, create_dataset, create_model, train, test, evaluator=None, k
     run_metrics = []
     for run in range(cfg.train.runs):
         set_seed(seeds[run])
-        acc = []
+        acc = [] if evaluate_representation else None
         for fold, (train_idx, test_idx) in enumerate(zip(*k_fold_indices)):
             train_dataset = dataset[train_idx]
             test_dataset = dataset[test_idx]
@@ -326,19 +331,21 @@ def run_k_fold(cfg, create_dataset, create_model, train, test, evaluator=None, k
             # Create EMA scheduler for target encoder param update
             ipe = len(train_loader)
             ema_params = [0.996, 1.0]
-            momentum_scheduler = (ema_params[0] + i*(ema_params[1]-ema_params[0])/(ipe*cfg.train.epochs)
-                                for i in range(int(ipe*cfg.train.epochs)+1))
-            
+            momentum_scheduler = iter(
+                ema_params[0] + i * (ema_params[1] - ema_params[0]) / (ipe * cfg.train.epochs)
+                for i in range(int(ipe * cfg.train.epochs) + 1)
+            )
+
             for epoch in range(cfg.train.epochs):
                 start = time.time()
                 model.train()
-                _, train_loss = train(
-                    train_loader, model, optimizer, 
-                    evaluator=evaluator, device=cfg.device, 
-                    momentum_weight=next(momentum_scheduler), criterion_type=cfg.jepa.dist)
+                _, train_loss, last_momentum = train(
+                    train_loader, model, optimizer,
+                    evaluator=evaluator, device=cfg.device,
+                    momentum_scheduler=momentum_scheduler, criterion_type=cfg.jepa.dist)
                 model.eval()
                 _, test_loss = test(
-                    test_loader, model, evaluator=evaluator, device=cfg.device, 
+                    test_loader, model, evaluator=evaluator, device=cfg.device,
                     criterion_type=cfg.jepa.dist)
 
                 scheduler.step(test_loss)
@@ -349,6 +356,8 @@ def run_k_fold(cfg, create_dataset, create_model, train, test, evaluator=None, k
                       f' Test Loss:{test_loss:.4f}, Seconds: {time_cur_epoch:.4f}, ')
                 writer.add_scalar(f'Run{run}/train-loss', train_loss, epoch)
                 writer.add_scalar(f'Run{run}/test-loss', test_loss, epoch)
+                if last_momentum is not None:
+                    writer.add_scalar(f'Run{run}/momentum_weight', last_momentum, epoch)
 
                 if optimizer.param_groups[0]['lr'] < cfg.train.min_lr:
                     print("!! LR EQUAL TO MIN LR SET.")
@@ -358,46 +367,47 @@ def run_k_fold(cfg, create_dataset, create_model, train, test, evaluator=None, k
             total_time = (time.time()-start_outer)/3600
 
            
-            # Finetune using a linear and a nonlinear model after training (use scikit-learn for both, easier to implement)
-            # Extract data from the dataLoaders
-            model.eval()
-            X_train, y_train = [], []
-            X_test, y_test = [], []
+            if evaluate_representation:
+                # Finetune using a linear and a nonlinear model after training (use scikit-learn for both, easier to implement)
+                # Extract data from the dataLoaders
+                model.eval()
+                X_train, y_train = [], []
+                X_test, y_test = [], []
 
-            # Extracting training features and labels in Scikit-Learn api
-            for data in train_loader:
-                data.to(cfg.device)
-                with torch.no_grad():
-                    features = model.encode(data)
-                    X_train.append(features.detach().cpu().numpy())
-                    y_train.append(data.y.detach().cpu().numpy())
+                # Extracting training features and labels in Scikit-Learn api
+                for data in train_loader:
+                    data.to(cfg.device)
+                    with torch.no_grad():
+                        features = model.encode(data)
+                        X_train.append(features.detach().cpu().numpy())
+                        y_train.append(data.y.detach().cpu().numpy())
 
-            # Concatenate the lists into numpy arrays
-            X_train = np.concatenate(X_train, axis=0)
-            y_train = np.concatenate(y_train, axis=0)
+                # Concatenate the lists into numpy arrays
+                X_train = np.concatenate(X_train, axis=0)
+                y_train = np.concatenate(y_train, axis=0)
 
-            for data in test_loader:
-                data.to(cfg.device)
-                with torch.no_grad():
-                    features = model.encode(data)
-                    X_test.append(features.detach().cpu().numpy())
-                    y_test.append(data.y.detach().cpu().numpy())
+                for data in test_loader:
+                    data.to(cfg.device)
+                    with torch.no_grad():
+                        features = model.encode(data)
+                        X_test.append(features.detach().cpu().numpy())
+                        y_test.append(data.y.detach().cpu().numpy())
 
-            # Concatenate the lists into numpy arrays
-            X_test = np.concatenate(X_test, axis=0)
-            y_test = np.concatenate(y_test, axis=0)
+                # Concatenate the lists into numpy arrays
+                X_test = np.concatenate(X_test, axis=0)
+                y_test = np.concatenate(y_test, axis=0)
 
-            print("Data shapes:", X_train.shape, y_train.shape, X_test.shape, y_test.shape)
+                print("Data shapes:", X_train.shape, y_train.shape, X_test.shape, y_test.shape)
 
-            # 1) L2 penalized logistic regression for fine tuning
-            lin_model = LogisticRegression(max_iter=10000)
-            lin_model.fit(X_train, y_train)
-            lin_predictions = lin_model.predict(X_test)
-            lin_accuracy = accuracy_score(y_test, lin_predictions)
-            acc.append(lin_accuracy)
+                # 1) L2 penalized logistic regression for fine tuning
+                lin_model = LogisticRegression(max_iter=10000)
+                lin_model.fit(X_train, y_train)
+                lin_predictions = lin_model.predict(X_test)
+                lin_accuracy = accuracy_score(y_test, lin_predictions)
+                acc.append(lin_accuracy)
 
-            print(f'Fold {fold}, Seconds/epoch: {per_epoch_time}')
-            print(f'Acc.: {lin_accuracy}')
+                print(f'Fold {fold}, Seconds/epoch: {per_epoch_time}')
+                print(f'Acc.: {lin_accuracy}')
             train_losses.append(train_loss)
             per_epoch_times.append(per_epoch_time)
             total_times.append(total_time)
@@ -407,10 +417,11 @@ def run_k_fold(cfg, create_dataset, create_model, train, test, evaluator=None, k
         print("Convergence Time (Epochs): {}".format(epoch+1))
         print("AVG TIME PER EPOCH: {:.4f} s".format(per_epoch_time))
         print("TOTAL TIME TAKEN: {:.4f} h".format(total_time))
-        acc = np.array(acc)
-        print(f'Acc mean: {acc.mean()}, std: {acc.std()}')
-        run_metrics.append([acc.mean(), acc.std()])
-        print()
+        if evaluate_representation and acc:
+            acc = np.array(acc)
+            print(f'Acc mean: {acc.mean()}, std: {acc.std()}')
+            run_metrics.append([acc.mean(), acc.std()])
+            print()
 
     if cfg.train.runs > 1:
         train_loss = torch.tensor(train_losses)
@@ -426,7 +437,8 @@ def run_k_fold(cfg, create_dataset, create_model, train, test, evaluator=None, k
                     f'\nSeconds/epoch: {per_epoch_time.mean():.4f}'
                     f'\nHours/total: {total_time.mean():.4f}')
 
-    run_metrics = np.array(run_metrics)
-    print('Averages over 5 runs:')
-    print(run_metrics[:, 0].mean(), run_metrics[:, 1].mean())
-    print()
+    if evaluate_representation and run_metrics:
+        run_metrics = np.array(run_metrics)
+        print('Averages over 5 runs:')
+        print(run_metrics[:, 0].mean(), run_metrics[:, 1].mean())
+        print()
