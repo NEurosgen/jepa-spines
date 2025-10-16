@@ -47,6 +47,7 @@ def train(train_loader, model, optimizer, evaluator, device, momentum_weight, sh
         
         # Update weights of the network 
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(),max_norm=1)
         optimizer.step()
 
         # Update the target encoder using an exponential smoothing of the context encoder
@@ -91,6 +92,7 @@ CONFIG_PATH = Path(__file__).resolve().parents[2] / "conf"
 
 @hydra.main(version_base=None, config_path=str(CONFIG_PATH), config_name="config")
 def main(cfg: DictConfig):
+    
     run(cfg, create_dataset=create_dataset, create_model=create_model, train=train,test= test)
     
 

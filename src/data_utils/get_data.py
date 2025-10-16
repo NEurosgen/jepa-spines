@@ -7,7 +7,7 @@ from torch_geometric.datasets import ZINC, TUDataset
 from src.data_utils.exp import PlanarSATPairsDataset
 from src.data_utils.transform import PositionalEncodingTransform, GraphJEPAPartitionTransform
 import src.datasets.labid_data, src.datasets.labid_spheric_data,src.datasets.microns_spheric_dataset
-
+from src.datasets.normalize_nodes import compute_node_feature_stats,NodeFeatureNormalizer,normalize_dataset_inplace
 from torch.utils.data import DataLoader,random_split
 def calculate_stats(dataset):
     num_graphs = len(dataset)
@@ -126,12 +126,17 @@ def create_dataset(cfg,seed = None):
         dataset =  src.datasets.microns_spheric_dataset.WightlessDS(root = root_ds)
         n_total = len(dataset)
         n_val = int(cfg.data.val_ratio * n_total)
-    
+        print("in classi feat")
         ## TODO Нормировку сделай а то градиенты взрываются
 
         
         
         state = torch.load("node_norm_stats_classic.pt", map_location="cpu")
+        print("normalize data ", state)
+       
+
+
+
         val_normalizer = NodeFeatureNormalizer.from_state_dict(state)
         
         n_train = n_total - n_val 
@@ -143,7 +148,8 @@ def create_dataset(cfg,seed = None):
             mode=cfg.data.mode,
             gamma=cfg.data.gamma,
             transform= transform_train,
-            pre_transform = Compose([ val_normalizer,pre_transform]),classical_feat=True
+            pre_transform = Compose([ val_normalizer,pre_transform]),classical_feat=True,
+            knn = cfg.data.knn
         )
         val_dataset=  src.datasets.microns_spheric_dataset.SpineGraphDataset(
             ds=val_ds,
@@ -151,7 +157,8 @@ def create_dataset(cfg,seed = None):
             mode=cfg.data.mode,
             gamma=cfg.data.gamma,
             transform=transform_eval,
-            pre_transform=Compose([ val_normalizer,pre_transform]),classical_feat=True
+            pre_transform=Compose([ val_normalizer,pre_transform]),classical_feat=True,
+            knn  = cfg.data.knn
         )
     
 

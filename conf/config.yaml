@@ -6,21 +6,21 @@ num_workers: 4
 model:
   gMHA_type: Hadamard
   gnn_type: GCNConv
-  nlayer_gnn: 1
+  nlayer_gnn: 2
   nlayer_mlpmixer: 2
   hidden_size: 232
   pool: 'mean'
   ctx_as_target_prob: 0.2
 train:
   optimizer:
-  wd: 0.001
+  wd: 0.01
   dropout: 0.2
   mlpmixer_dropout: 0.1
   lr_patience: 20
-  epochs: 10
+  epochs: 100
   batch_size: 128
-  lr: 0.0005
-  runs: 3
+  lr: 0.0001
+  runs: 1
   lr_decay: 0.8
   min_lr: 1e-8
 metis:
@@ -30,16 +30,16 @@ metis:
   num_hops: 2
 
 pos_enc:
-  rw_dim: 2
-  patch_rw_dim: 2
-  lap_dim: 0
+  rw_dim: 8
+  patch_rw_dim: 8
+  lap_dim: 8
   patch_num_diff: 0
 device: 'cuda'
 
 jepa:
   dist: 1
   enable: true
-  num_context: 1
+  num_context: 1  #Что это значит
   num_targets: 1
 
 

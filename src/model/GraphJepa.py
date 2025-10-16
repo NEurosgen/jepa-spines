@@ -75,7 +75,7 @@ class GraphJepa(nn.Module):
 
         # Predictor
         self.target_predictor = MLP(
-            nhid, 2, nlayer=3, with_final_activation=False, with_norm=False)
+            nhid, 232, nlayer=3, with_final_activation=False, with_norm=False)
 
         # Use this predictor if you wish to do euclidean or poincaré embeddings in the latent space
         # self.target_predictor = MLP(
@@ -92,7 +92,6 @@ class GraphJepa(nn.Module):
                 if hasattr(data, k):
                     v = getattr(data, k)
                     tstats(v, f"data.{k}", log)
-
 
         x = self.input_encoder(data.x).squeeze()
         if self.debug and log is not None:
@@ -115,12 +114,10 @@ class GraphJepa(nn.Module):
         patch_pes = scatter(
             pes.detach().cpu(),
             batch_x.detach().cpu(),
-            dim=0, reduce='max'
+            dim=0, reduce='mean'
         ).to('cuda')
         for i, gnn in enumerate(self.gnns):
             if i > 0:
-                subgraph = scatter(x, batch_x, dim=0,
-                                   reduce=self.pooling)[batch_x]
                 subgraph = scatter(x, batch_x, dim=0,
                                    reduce=self.pooling)[batch_x]
                 x = x + self.U[i-1](subgraph)
@@ -162,7 +159,10 @@ class GraphJepa(nn.Module):
         context_mask = data.mask.flatten()[context_subgraph_idx].reshape(-1, self.num_context_patches) # this should be -1 x num context
         context_x = self.context_encoder(context_x, data.coarsen_adj if hasattr(
             data, 'coarsen_adj') else None, ~context_mask)
+        
 
+        was_training = self.target_encoder.training
+        self.target_encoder.eval()
         # The target forward step musn't store gradients, since the target encoder is optimized via EMA
         with torch.no_grad():
             if hasattr(data, 'coarsen_adj'):
@@ -178,10 +178,11 @@ class GraphJepa(nn.Module):
 
             # Predict the coordinates of the patches in the Q1 hyperbola
             # Remove this part if you wish to do euclidean or poincaré embeddings in the latent space
-            x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
-            y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
-            target_x = torch.cat([x_coord, y_coord], dim=-1)
-
+            # x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
+            # y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
+            # target_x = torch.cat([x_coord, y_coord], dim=-1)
+        if was_training:
+            self.target_encoder.train()
         if self.debug and log is not None:
             tstats(target_x, "target_x(teacher)", log)
         # Make predictions using the target predictor: for each target subgraph, we use the context + the target PE

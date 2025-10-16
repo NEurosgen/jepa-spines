@@ -54,6 +54,22 @@ def _create_summary_writer(cfg):
     log_dir.mkdir(parents=True, exist_ok=True)
     return SummaryWriter(log_dir=str(log_dir))
 
+def make_hook(name):
+    def hook(module, inputs, outputs):
+        def fmt(x):
+            if isinstance(x, torch.Tensor):
+                return tuple(x.shape)
+            elif hasattr(x, 'shape'):
+                return x.shape
+            elif isinstance(x, (list, tuple)):
+                return [fmt(i) for i in x]
+            elif isinstance(x, dict):
+                return {k: fmt(v) for k, v in x.items()}
+            else:
+                return type(x).__name__
+        print(f"{name}: in={fmt(inputs)} -> out={fmt(outputs)}")
+    return hook
+
 
 def run(cfg, create_dataset, create_model, train, test, evaluator=None):
     if cfg.seed is not None:
@@ -71,7 +87,7 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
         val_dataset,  cfg.train.batch_size, shuffle=False, num_workers=cfg.num_workers)
     test_loader = DataLoader(
         test_dataset, cfg.train.batch_size, shuffle=False, num_workers=cfg.num_workers)
-    
+
     train_losses = []
     per_epoch_times = []
     total_times = []
@@ -79,6 +95,13 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
     for run in range(cfg.train.runs):
         set_seed(seeds[run])
         model = create_model(cfg).to(cfg.device)
+
+
+
+        # for name, module in model.named_modules():
+        #     if not list(module.children()):  # только “листья”
+        #         module.register_forward_hook(make_hook(name))
+        
         print(f"\nNumber of parameters: {count_parameters(model)}")
 
         if cfg.train.optimizer == 'ASAM':
@@ -101,7 +124,7 @@ def run(cfg, create_dataset, create_model, train, test, evaluator=None):
         
         # Create EMA scheduler for target encoder param update
         ipe = len(train_loader)
-        ema_params = [0.996, 1.0]
+        ema_params = [0.998, 1.0]
         momentum_scheduler = (ema_params[0] + i*(ema_params[1]-ema_params[0])/(ipe*cfg.train.epochs)
                             for i in range(int(ipe*cfg.train.epochs)+1))
         for epoch in range(cfg.train.epochs):

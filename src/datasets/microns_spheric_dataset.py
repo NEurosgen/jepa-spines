@@ -8,11 +8,11 @@ from torch_geometric.data import Dataset, Data
 from torch_geometric.utils import from_networkx
 
 FEATURES = [
-    "head_area", "head_volume", "head_skeletal_length",
-    "head_width_ray", "head_width_ray_80_perc",
-    "head_bbox_max", "head_bbox_min", "head_bbox_middle",
-    "neck_area", "neck_volume", "neck_skeletal_length",
-    "neck_width_ray", "neck_width_ray_80_perc",
+    "feat_head_area", "feat_head_volume", "feat_head_skeletal_length",
+    "feat_head_width_ray", "feat_head_width_ray_80_perc",
+    "feat_head_bbox_max", "feat_head_bbox_min", "feat_head_bbox_middle",
+    "feat_neck_area", "feat_neck_volume", "feat_neck_skeletal_length",
+    "feat_neck_width_ray", "feat_neck_width_ray_80_perc",
 ]
 
 # ---------- utils ----------
@@ -32,7 +32,7 @@ def to_scalar(x):
 def nx_to_data(G: nx.Graph) -> Data:
     # гарантированно делаем x: float32, без NaN
     for n in G.nodes:
-        feat = [to_scalar(G.nodes[n].get(f, 0.0)) for f in FEATURES]
+        feat = [to_scalar(G.nodes[n][f]) for f in FEATURES]
         G.nodes[n].clear()
         G.nodes[n]["x"] = torch.tensor(feat, dtype=torch.float32)
     data = from_networkx(G, group_node_attrs=["x"])
@@ -250,18 +250,21 @@ def pyg_data_to_nx(data) -> nx.Graph:
                 G[u][v]["attr"] = w
 
     return G
-def build_graph_list(dataset: Dataset, mode: str, count: int,classical_feat ,gamma: float = 0.8):
+def build_graph_list(dataset: Dataset, mode: str, count: int,classical_feat,knn: int = 0 ,gamma: float = 0.8):
     
     all_data = []
     for path in dataset:
         with open(path, "rb") as f:
             G = pickle.load(f)
+            if knn and knn > 0:
+                G = knn_graph(G, k=knn, mutual=True)
+
         skip = False
         for node in list(G.nodes()):
-            if 'sph_harm_coeffs' not in G.nodes[node]:
+            if 'sph_harm_coeffs' not in G.nodes[node] and classical_feat == False:
                 skip = True
                 break
-        if skip or len(G.nodes()) < 5: continue
+        if skip or (len(G.nodes()) < 6 or  len(G.nodes()) > 20) : continue
         if mode == "MarkovGraphs":
             graphs = generate_markov_graphs(G, count=count, num_steps=10, gamma=gamma)
         elif mode == "CopiedGraphs":
@@ -295,6 +298,7 @@ class SpineGraphDataset(Dataset):
                  mode: str = "CopiedGraphs",
                  max_size: int = 100000,
                  gamma: float = 0.8,
+                 knn: int = 0,
                  transform=None,            
                  pre_transform=None,
                  classical_feat = False):        
@@ -306,7 +310,7 @@ class SpineGraphDataset(Dataset):
         self.pre_transform = pre_transform
 
         data_list = build_graph_list(
-            dataset=ds, mode=mode, count=count_per_item, gamma=gamma,classical_feat=classical_feat
+            dataset=ds, mode=mode, count=count_per_item, gamma=gamma,classical_feat=classical_feat , knn= knn
         )
         if self.pre_transform is not None:
             data_list = [self.pre_transform(d) for d in data_list]
